@@ -356,6 +356,7 @@ dep_option(SDL_ROCKCHIP            "Use ROCKCHIP Hardware Acceleration video dri
 dep_option(SDL_COCOA               "Use Cocoa video driver" ON "APPLE" OFF)
 dep_option(SDL_DIRECTX             "Use DirectX for Windows audio/video" ON "SDL_AUDIO OR SDL_VIDEO;WINDOWS" OFF)
 dep_option(SDL_XINPUT              "Use Xinput for Windows" ON "WINDOWS" OFF)
+dep_option(SDL_ASIO                "Use the ASIO audio driver" ON "WINDOWS;SDL_AUDIO" OFF)
 dep_option(SDL_WASAPI              "Use the Windows WASAPI audio driver" ON "WINDOWS;SDL_AUDIO" OFF)
 dep_option(SDL_RENDER_D3D          "Enable the Direct3D 9 render driver" ON "SDL_RENDER;SDL_DIRECTX" OFF)
 dep_option(SDL_RENDER_D3D11        "Enable the Direct3D 11 render driver" ON "SDL_RENDER;SDL_DIRECTX" OFF)
@@ -2216,6 +2217,16 @@ elseif(WINDOWS)
   )
 
   if(SDL_AUDIO)
+    if(SDL_ASIO)
+      set(SDL_AUDIO_DRIVER_ASIO 1)
+      set(HAVE_ASIO TRUE)
+      sdl_glob_sources(
+        "${SDL3_SOURCE_DIR}/src/audio/asio/*.c"
+        "${SDL3_SOURCE_DIR}/src/audio/asio/*.h"
+      )
+      set(HAVE_SDL_AUDIO TRUE)
+    endif()
+
     if(HAVE_DSOUND_H)
       set(SDL_AUDIO_DRIVER_DSOUND 1)
       sdl_glob_sources(

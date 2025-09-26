@@ -216,6 +216,7 @@ typedef unsigned int uintptr_t;
 #endif
 
 /* Enable various audio drivers */
+#define SDL_AUDIO_DRIVER_ASIO 1
 #if defined(HAVE_MMDEVICEAPI_H) && defined(HAVE_AUDIOCLIENT_H)
 #define SDL_AUDIO_DRIVER_WASAPI 1
 #endif

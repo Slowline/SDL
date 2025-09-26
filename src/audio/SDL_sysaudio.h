@@ -374,6 +374,7 @@ extern AudioBootStrap JACK_bootstrap;
 extern AudioBootStrap SNDIO_bootstrap;
 extern AudioBootStrap NETBSDAUDIO_bootstrap;
 extern AudioBootStrap DSP_bootstrap;
+extern AudioBootStrap ASIO_bootstrap;
 extern AudioBootStrap WASAPI_bootstrap;
 extern AudioBootStrap DSOUND_bootstrap;
 extern AudioBootStrap WINMM_bootstrap;
