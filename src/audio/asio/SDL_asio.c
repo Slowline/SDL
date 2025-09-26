@@ -18,6 +18,38 @@
      misrepresented as being the original software.
   3. This notice may not be removed or altered from any source distribution.
 */
+
+/*
+  ASIO Audio Driver for SDL3
+  
+  This driver provides low-latency audio playback and recording using the
+  ASIO (Audio Stream Input/Output) interface developed by Steinberg.
+  
+  ASIO provides professional-quality, low-latency audio I/O and is commonly
+  used in digital audio workstations and professional audio applications.
+  
+  IMPORTANT NOTES FOR PRODUCTION USE:
+  
+  1. ASIO SDK License: To use this driver in production, you need to download
+     the official ASIO SDK from Steinberg and comply with their license terms.
+     This implementation uses the public ASIO interface definitions.
+  
+  2. Driver Discovery: In a complete implementation, ASIO drivers should be
+     discovered through the Windows registry by enumerating COM objects with
+     the ASIO interface CLSID {232685C6-6548-49D8-BD68-C753FDC7C5B0}.
+  
+  3. COM Integration: ASIO drivers are COM objects and require proper COM
+     initialization and interface querying.
+  
+  4. Format Support: This basic implementation assumes 16-bit PCM audio.
+     Production code should support all ASIO sample formats (int16, int24, 
+     int32, float32, float64) and handle endianness correctly.
+  
+  5. Channel Mapping: Professional audio interfaces often have many channels.
+     This implementation handles basic stereo output but should be extended
+     for multi-channel audio.
+*/
+
 #include "SDL_internal.h"
 
 #ifdef SDL_AUDIO_DRIVER_ASIO
@@ -61,17 +93,28 @@ bool ASIO_LoadDriver(void)
         return true; // Already loaded
     }
 
-    // Try to load the generic ASIO driver interface
-    // Note: In a real implementation, you would typically load a specific ASIO driver DLL
-    // For now, we'll simulate this with a placeholder
-    asio_dll = LoadLibraryA("asio.dll");
-    if (!asio_dll) {
-        // Try alternative names or paths
-        asio_dll = LoadLibraryA("asiodrvr.dll");
+    // ASIO drivers are typically COM objects registered in the Windows registry
+    // For a production implementation, we would enumerate ASIO drivers from the registry
+    // and load the appropriate one. For now, we'll try some common ASIO driver names.
+    
+    const char* asio_drivers[] = {
+        "asio.dll",                // Generic ASIO
+        "asiodrvr.dll",           // Alternative generic name
+        "asio4all.dll",           // ASIO4ALL universal driver
+        "rtxasio.dll",            // RealTek ASIO
+        "FlexASIO.dll",           // FlexASIO universal driver
+        NULL
+    };
+
+    for (int i = 0; asio_drivers[i] != NULL; i++) {
+        asio_dll = LoadLibraryA(asio_drivers[i]);
+        if (asio_dll) {
+            break;
+        }
     }
 
     if (!asio_dll) {
-        SDL_SetError("ASIO: Could not load ASIO driver library");
+        SDL_SetError("ASIO: Could not load any ASIO driver library. Make sure an ASIO driver is installed.");
         return false;
     }
 
@@ -423,8 +466,18 @@ static bool ASIO_PlayDevice(SDL_AudioDevice *device, const Uint8 *buffer, int bu
         hidden->driver_started = true;
     }
 
-    // The actual buffer copying is handled in the ASIO callback
-    // This function mainly ensures the driver is running
+    // Copy audio data to ASIO buffer if available
+    if (hidden->current_buffer && buffer && buffer_size > 0) {
+        int copy_size = SDL_min(buffer_size, hidden->current_buffer_size);
+        SDL_memcpy(hidden->current_buffer, buffer, copy_size);
+        
+        // If we have remaining space, clear it
+        if (copy_size < hidden->current_buffer_size) {
+            SDL_memset((Uint8*)hidden->current_buffer + copy_size, 0, 
+                      hidden->current_buffer_size - copy_size);
+        }
+    }
+
     return true;
 }
 
@@ -443,9 +496,9 @@ static void ASIO_Deinitialize(void)
 
 static bool ASIO_Init(SDL_AudioDriverImpl *impl)
 {
-    // Try to load the ASIO driver
+    // Try to load the ASIO driver - if this fails, ASIO is not available
     if (!ASIO_LoadDriver()) {
-        return false;
+        return false; // ASIO not available, SDL will try the next driver
     }
 
     // Set up the driver implementation
@@ -458,7 +511,7 @@ static bool ASIO_Init(SDL_AudioDriverImpl *impl)
     impl->OnlyHasDefaultPlaybackDevice = true;
     impl->ProvidesOwnCallbackThread = true; // ASIO provides its own callback thread
 
-    return true;
+    return true; // ASIO driver is available and ready
 }
 
 AudioBootStrap ASIO_bootstrap = {
