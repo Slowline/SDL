@@ -523,6 +523,30 @@ extern "C" {
 #define SDL_HINT_AUDIO_INCLUDE_MONITORS "SDL_AUDIO_INCLUDE_MONITORS"
 
 /**
+ * A variable controlling whether the Windows WASAPI audio driver should use
+ * exclusive mode.
+ *
+ * By default, SDL will attempt to use exclusive mode for WASAPI audio devices,
+ * which provides lower latency but prevents other applications from using the
+ * audio device. When this hint is set to "0", SDL will use shared mode, which
+ * allows audio to be mixed with other applications.
+ *
+ * Note that exclusive mode may not always be available, and if it fails, SDL
+ * will fall back to shared mode. Also, exclusive mode will use the device's
+ * native audio format, which may not match the requested format.
+ *
+ * The variable can be set to the following values:
+ *
+ * - "0": Use shared mode.
+ * - "1": Attempt to use exclusive mode, fall back to shared mode if unavailable. (default)
+ *
+ * This hint should be set before opening an audio device.
+ *
+ * \since This hint is available since SDL 3.2.0.
+ */
+#define SDL_HINT_AUDIO_WASAPI_EXCLUSIVE_MODE "SDL_AUDIO_WASAPI_EXCLUSIVE_MODE"
+
+/**
  * A variable controlling whether SDL updates joystick state when getting
  * input events.
  *

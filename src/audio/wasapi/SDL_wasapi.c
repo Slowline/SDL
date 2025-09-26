@@ -669,18 +669,9 @@ static bool mgmtthrtask_PrepDevice(void *userdata)
 {
     SDL_AudioDevice *device = (SDL_AudioDevice *)userdata;
 
-    /* !!! FIXME: we could request an exclusive mode stream, which is lower latency;
-       !!!  it will write into the kernel's audio buffer directly instead of
-       !!!  shared memory that a user-mode mixer then writes to the kernel with
-       !!!  everything else. Doing this means any other sound using this device will
-       !!!  stop playing, including the user's MP3 player and system notification
-       !!!  sounds. You'd probably need to release the device when the app isn't in
-       !!!  the foreground, to be a good citizen of the system. It's doable, but it's
-       !!!  more work and causes some annoyances, and I don't know what the latency
-       !!!  wins actually look like. Maybe add a hint to force exclusive mode at
-       !!!  some point. To be sure, defaulting to shared mode is the right thing to
-       !!!  do in any case. */
-    const AUDCLNT_SHAREMODE sharemode = AUDCLNT_SHAREMODE_SHARED;
+    /* Check if exclusive mode is requested via hint */
+    const bool use_exclusive_mode = SDL_GetHintBoolean(SDL_HINT_AUDIO_WASAPI_EXCLUSIVE_MODE, true);
+    const AUDCLNT_SHAREMODE sharemode = use_exclusive_mode ? AUDCLNT_SHAREMODE_EXCLUSIVE : AUDCLNT_SHAREMODE_SHARED;
 
     IAudioClient *client = device->hidden->client;
     SDL_assert(client != NULL);
@@ -693,9 +684,52 @@ static bool mgmtthrtask_PrepDevice(void *userdata)
     HRESULT ret;
 
     WAVEFORMATEX *waveformat = NULL;
-    ret = IAudioClient_GetMixFormat(client, &waveformat);
-    if (FAILED(ret)) {
-        return WIN_SetErrorFromHRESULT("WASAPI can't determine mix format", ret);
+    
+    // For exclusive mode, we need to handle format negotiation differently
+    if (sharemode == AUDCLNT_SHAREMODE_EXCLUSIVE) {
+        // First, try to see if the device supports the requested format exactly
+        WAVEFORMATEX *closest_format = NULL;
+        WAVEFORMATEX requested_format;
+        
+        // Create a format based on the requested spec
+        requested_format.wFormatTag = WAVE_FORMAT_PCM;
+        requested_format.nChannels = device->spec.channels;
+        requested_format.nSamplesPerSec = device->spec.freq;
+        requested_format.wBitsPerSample = SDL_AUDIO_BITSIZE(device->spec.format);
+        requested_format.nBlockAlign = requested_format.nChannels * (requested_format.wBitsPerSample / 8);
+        requested_format.nAvgBytesPerSec = requested_format.nSamplesPerSec * requested_format.nBlockAlign;
+        requested_format.cbSize = 0;
+        
+        // Handle float formats
+        if (SDL_AUDIO_ISFLOAT(device->spec.format)) {
+            requested_format.wFormatTag = WAVE_FORMAT_IEEE_FLOAT;
+        }
+        
+        ret = IAudioClient_IsFormatSupported(client, sharemode, &requested_format, &closest_format);
+        if (SUCCEEDED(ret) && ret != S_FALSE) {
+            // Device supports the exact format
+            waveformat = (WAVEFORMATEX *)SDL_malloc(sizeof(WAVEFORMATEX));
+            if (!waveformat) {
+                return SDL_OutOfMemory();
+            }
+            SDL_memcpy(waveformat, &requested_format, sizeof(WAVEFORMATEX));
+        } else {
+            // Fall back to device native format for exclusive mode
+            ret = IAudioClient_GetMixFormat(client, &waveformat);
+            if (FAILED(ret)) {
+                return WIN_SetErrorFromHRESULT("WASAPI can't determine device format for exclusive mode", ret);
+            }
+        }
+        
+        if (closest_format) {
+            CoTaskMemFree(closest_format);
+        }
+    } else {
+        // Shared mode - use GetMixFormat
+        ret = IAudioClient_GetMixFormat(client, &waveformat);
+        if (FAILED(ret)) {
+            return WIN_SetErrorFromHRESULT("WASAPI can't determine mix format", ret);
+        }
     }
     SDL_assert(waveformat != NULL);
     device->hidden->waveformat = waveformat;
@@ -775,11 +809,40 @@ static bool mgmtthrtask_PrepDevice(void *userdata)
     }
 #endif
 
-    if (!iaudioclient3_initialized)
-        ret = IAudioClient_Initialize(client, sharemode, streamflags, 0, 0, waveformat, NULL);
+    if (!iaudioclient3_initialized) {
+        if (sharemode == AUDCLNT_SHAREMODE_EXCLUSIVE) {
+            // For exclusive mode, we need to provide buffer duration
+            // Use the default period for both buffer and period durations
+            ret = IAudioClient_Initialize(client, sharemode, streamflags, default_period, default_period, waveformat, NULL);
+        } else {
+            // Shared mode - use zero for system to determine buffer size
+            ret = IAudioClient_Initialize(client, sharemode, streamflags, 0, 0, waveformat, NULL);
+        }
+    }
 
     if (FAILED(ret)) {
-        return WIN_SetErrorFromHRESULT("WASAPI can't initialize audio client", ret);
+        // If exclusive mode failed, try falling back to shared mode
+        if (sharemode == AUDCLNT_SHAREMODE_EXCLUSIVE) {
+            // Free the current waveformat and get mix format for shared mode
+            CoTaskMemFree(waveformat);
+            waveformat = NULL;
+            
+            ret = IAudioClient_GetMixFormat(client, &waveformat);
+            if (FAILED(ret)) {
+                return WIN_SetErrorFromHRESULT("WASAPI can't determine mix format for fallback", ret);
+            }
+            
+            // Try shared mode initialization
+            ret = IAudioClient_Initialize(client, AUDCLNT_SHAREMODE_SHARED, streamflags, 0, 0, waveformat, NULL);
+            if (SUCCEEDED(ret)) {
+                // Update device->hidden->waveformat for the new format
+                device->hidden->waveformat = waveformat;
+            }
+        }
+        
+        if (FAILED(ret)) {
+            return WIN_SetErrorFromHRESULT("WASAPI can't initialize audio client", ret);
+        }
     }
 
     ret = IAudioClient_SetEventHandle(client, device->hidden->event);
