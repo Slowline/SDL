@@ -526,10 +526,10 @@ extern "C" {
  * A variable controlling whether the Windows WASAPI audio driver should use
  * exclusive mode.
  *
- * By default, SDL will use shared mode for WASAPI audio devices, which means
- * the audio will be mixed with other applications. When this hint is set to
- * "1", SDL will attempt to use exclusive mode, which provides lower latency
- * but prevents other applications from using the audio device.
+ * By default, SDL will attempt to use exclusive mode for WASAPI audio devices,
+ * which provides lower latency but prevents other applications from using the
+ * audio device. When this hint is set to "0", SDL will use shared mode, which
+ * allows audio to be mixed with other applications.
  *
  * Note that exclusive mode may not always be available, and if it fails, SDL
  * will fall back to shared mode. Also, exclusive mode will use the device's
@@ -537,8 +537,8 @@ extern "C" {
  *
  * The variable can be set to the following values:
  *
- * - "0": Use shared mode. (default)
- * - "1": Attempt to use exclusive mode, fall back to shared mode if unavailable.
+ * - "0": Use shared mode.
+ * - "1": Attempt to use exclusive mode, fall back to shared mode if unavailable. (default)
  *
  * This hint should be set before opening an audio device.
  *

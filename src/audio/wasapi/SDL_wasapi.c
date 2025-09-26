@@ -670,7 +670,7 @@ static bool mgmtthrtask_PrepDevice(void *userdata)
     SDL_AudioDevice *device = (SDL_AudioDevice *)userdata;
 
     /* Check if exclusive mode is requested via hint */
-    const bool use_exclusive_mode = SDL_GetHintBoolean(SDL_HINT_AUDIO_WASAPI_EXCLUSIVE_MODE, false);
+    const bool use_exclusive_mode = SDL_GetHintBoolean(SDL_HINT_AUDIO_WASAPI_EXCLUSIVE_MODE, true);
     const AUDCLNT_SHAREMODE sharemode = use_exclusive_mode ? AUDCLNT_SHAREMODE_EXCLUSIVE : AUDCLNT_SHAREMODE_SHARED;
 
     IAudioClient *client = device->hidden->client;
